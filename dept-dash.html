@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Wealth Tracker</title>
+  <style>
+    :root { --primary: #4cafef; --success: #66bb6a; --danger: #ef5350; --bg: #f0f2f5; --dark: #2c3e50; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: var(--bg); color: #333; }
+    .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .net-worth-card { text-align: center; background: var(--dark); color: white; }
+    .net-worth-amount { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+    .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 850px) { .grid-container { grid-template-columns: 1fr; } }
+    .item-row { border-bottom: 1px solid #eee; padding: 12px 0; }
+    .item-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+    .progress { background: #e0e0e0; border-radius: 10px; height: 12px; margin-top: 8px; overflow: hidden; }
+    .bar { height: 100%; transition: width 0.5s; }
+    input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px; width: 100%; box-sizing: border-box; }
+    button { padding: 10px 15px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; background: var(--dark); color: white; width: 100%; }
+    .delete-btn { color: var(--danger); background: none; font-size: 1.2rem; width: auto; padding: 0 5px; }
+    .date-label { font-size: 0.8rem; color: #7f8c8d; }
+  </style>
+</head>
+<body>
+
+  <div class="card net-worth-card">
+    <h2>Cloud Net Position</h2>
+    <div id="netWorthDisplay" class="net-worth-amount">$0</div>
+    <p id="syncStatus">☁️ Connecting to Firebase...</p>
+  </div>
+
+  <div class="grid-container">
+    <div class="card">
+      <h2 style="color: var(--success)">💰 Savings</h2>
+      <div id="savingsList"></div>
+      <div style="margin-top: 15px;">
+        <input type="text" id="savName" placeholder="Account Name">
+        <input type="number" id="savVal" placeholder="Balance">
+        <input type="date" id="savDate">
+        <button onclick="addItem('savings')">Add Savings</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="color: var(--danger)">💳 Debts</h2>
+      <div id="debtList"></div>
+      <div style="margin-top: 15px;">
+        <input type="text" id="debtName" placeholder="Debt Name">
+        <input type="number" id="debtTotal" placeholder="Total Balance">
+        <input type="number" id="debtPaid" placeholder="Amount Paid">
+        <button onclick="addItem('debts')">Add Debt</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // YOUR PERSONAL FIREBASE CONFIG
+    const firebaseConfig = {
+      apiKey: "AIzaSyC1BeYYPsIskQBgcNQqrp68W4Sx_Yzyj14",
+      authDomain: "dept-dash-14efd.firebaseapp.com",
+      databaseURL: "https://dept-dash-14efd-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "dept-dash-14efd",
+      storageBucket: "dept-dash-14efd.firebasestorage.app",
+      messagingSenderId: "109771929198",
+      appId: "1:109771929198:web:73cbebbeb1305edd6e587f",
+      measurementId: "G-QWJFJ6MQL2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const financeRef = ref(db, 'financeData');
+
+    let data = { debts: [], savings: [] };
+
+    // SYNC FROM CLOUD
+    onValue(financeRef, (snapshot) => {
+      const cloudData = snapshot.val();
+      if (cloudData) {
+        data = cloudData;
+        if (!data.debts) data.debts = [];
+        if (!data.savings) data.savings = [];
+        render();
+        document.getElementById('syncStatus').innerText = "✅ Live Cloud Sync Active";
+      } else {
+        document.getElementById('syncStatus').innerText = "🆕 Database Empty - Add your first entry!";
+      }
+    });
+
+    // ADD ITEM
+    window.addItem = function(type) {
+      if (type === 'savings') {
+        const name = document.getElementById('savName').value;
+        const val = parseFloat(document.getElementById('savVal').value);
+        if (!name || isNaN(val)) return alert("Enter name and amount");
+        data.savings.push({ name, bal: val, date: document.getElementById('savDate').value || 'Present' });
+      } else {
+        const name = document.getElementById('debtName').value;
+        const total = parseFloat(document.getElementById('debtTotal').value);
+        const paid = parseFloat(document.getElementById('debtPaid').value) || 0;
+        if (!name || isNaN(total)) return alert("Enter name and total");
+        data.debts.push({ name, total, paid });
+      }
+      set(financeRef, data); // Push to cloud
+      clearInputs();
+    };
+
+    window.deleteItem = function(type, index) {
+      if(confirm("Delete this?")) {
+        data[type].splice(index, 1);
+        set(financeRef, data);
+      }
+    };
+
+    function clearInputs() {
+      ['savName', 'savVal', 'savDate', 'debtName', 'debtTotal', 'debtPaid'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = '';
+      });
+    }
+
+    function render() {
+      const sList = document.getElementById('savingsList');
+      const dList = document.getElementById('debtList');
+      sList.innerHTML = ''; dList.innerHTML = '';
+      let totalSav = 0, totalDebt = 0;
+
+      data.savings.forEach((s, i) => {
+        totalSav += s.bal;
+        sList.innerHTML += `
+          <div class="item-row">
+            <div class="item-header">
+              <span>${s.name} <br><small class="date-label">Available: ${s.date}</small></span>
+              <span>$${s.bal.toLocaleString()} <button class="delete-btn" onclick="deleteItem('savings', ${i})">&times;</button></span>
+            </div>
+          </div>`;
+      });
+
+      data.debts.forEach((d, i) => {
+        const remaining = d.total - d.paid;
+        totalDebt += remaining;
+        const prog = (d.paid / d.total) * 100 || 0;
+        dList.innerHTML += `
+          <div class="item-row">
+            <div class="item-header">
+              <span>${d.name} <br><small class="date-label">$${d.paid.toLocaleString()} paid</small></span>
+              <span>$${remaining.toLocaleString()} left <button class="delete-btn" onclick="deleteItem('debts', ${i})">&times;</button></span>
+            </div>
+            <div class="progress"><div class="bar" style="width:${prog}%; background:var(--danger)"></div></div>
+          </div>`;
+      });
+
+      const net = totalSav - totalDebt;
+      const display = document.getElementById('netWorthDisplay');
+      display.innerText = (net >= 0 ? '$' : '-$') + Math.abs(net).toLocaleString();
+      display.style.color = net >= 0 ? '#81c784' : '#ff8a65';
+    }
+  </script>
+</body>
+</html>
