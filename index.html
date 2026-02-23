@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Step-by-Step Wealth Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root { --primary: #4cafef; --success: #66bb6a; --danger: #ef5350; --bg: #f0f2f5; --dark: #2c3e50; --warning: #ffa726; }
     body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: var(--bg); color: #333; }
@@ -35,6 +36,9 @@
     .due-late { background: #ffebee; color: #c62828; }
     
     .log-container { max-height: 250px; overflow-y: auto; font-size: 0.85rem; }
+    
+    /* Chart Container Style */
+    .chart-container { position: relative; height: 250px; width: 100%; margin-bottom: 20px; }
   </style>
 </head>
 <body>
@@ -61,7 +65,13 @@
       <label style="font-size: 0.8rem; color: #666;">Due Date:</label>
       <input type="date" id="debtDueDate">
       <button class="btn-main" onclick="addItem('debts')" style="background: var(--danger)">Create Debt Tracker</button>
-      <p style="font-size: 0.7rem; color: #999; margin-top: 10px;">* Debts are automatically sorted by due date.</p>
+      
+      <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+      
+      <div class="chart-container">
+        <canvas id="debtChart"></canvas>
+      </div>
+
       <div id="debtList"></div>
     </div>
   </div>
@@ -91,6 +101,7 @@
     const financeRef = ref(db, 'financeData');
 
     let data = { debts: [], savings: [], history: [] };
+    let myChart = null; // Variable to store chart instance
 
     onValue(financeRef, (snapshot) => {
       const d = snapshot.val();
@@ -116,7 +127,6 @@
         if(n) data.debts.push({ name: n, total: tt, paid: 0, dueDate: dd });
       }
       save();
-      // Reset inputs
       if(t==='savings') { document.getElementById('savName').value = ''; document.getElementById('savVal').value = ''; }
       else { document.getElementById('debtName').value = ''; document.getElementById('debtTotal').value = ''; document.getElementById('debtDueDate').value = ''; }
     };
@@ -152,6 +162,36 @@
       return `<span class="due-tag" style="background:#e8f5e9; color:#2e7d32">${dateStr}</span>`;
     }
 
+    // --- CHART UPDATE FUNCTION ---
+    function updateDebtChart(debts) {
+      const ctx = document.getElementById('debtChart').getContext('2d');
+      const labels = debts.map(d => d.name);
+      const balances = debts.map(d => (d.total - d.paid));
+
+      if (myChart) { myChart.destroy(); } // Refresh chart if it exists
+
+      if (balances.length === 0) return;
+
+      myChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: balances,
+            backgroundColor: ['#ef5350', '#ffa726', '#ba68c8', '#4cafef', '#90a4ae', '#ffd54f'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
     function render() {
       const sList = document.getElementById('savingsList');
       const dList = document.getElementById('debtList');
@@ -175,7 +215,6 @@
           </div>`;
       });
 
-      // SORT DEBTS BY DUE DATE (Closest/Overdue first)
       const sortedDebts = [...data.debts].map((d, originalIndex) => ({...d, originalIndex}))
         .sort((a, b) => {
           if (!a.dueDate) return 1;
@@ -208,6 +247,9 @@
             </div>
           </div>`;
       });
+
+      // Update Chart with current debt data
+      updateDebtChart(data.debts);
 
       data.history.forEach(h => { lList.innerHTML += `<div class="log-entry"><span><b>${h.name}</b>: $${h.amount.toLocaleString()}<br><small>${h.date} ${h.note?'| '+h.note:''}</small></span></div>`; });
       const net = ts - td;
